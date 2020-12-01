@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-df = pd.read_csv("./data/convid-9.csv", sep="\t")
+df = pd.read_csv("./data/covid-19.csv", sep="\t")
 df.plot(x="date", y=["confirmed_num", "cured_num", "dead_num"], figsize=(10,6))
 plt.xticks(rotation=60)
 
