@@ -80,7 +80,89 @@ print(Y_hat.grad_fn)
 
 # 三、计算图与反向传播
 # 了解Function的功能，我们可以简单地理解一下反向传播的原理和过程。理解该部分原理需要一些高等数学中求导链式法则的基础知识。
+x = torch.tensor(3.0, requires_grad=True)
+y1 = x + 1
+y2 = 2*x
+loss = (y1-y2)**2
 
+loss.backward()
+
+# loss.backward()语句调用后，依次发生以下计算过程。
+# 1、loss根据自己的grad梯度赋值为1，即对自身的梯度为1.
+# 2、loss根据其自身梯度以及关联的backward方法，计算出其对应的自变量即y1和y2的 梯度，将该值赋值到y1.grad和y2.grad。
+# 3、y2和y1根据其自身梯度以及关联的backward方法，分别计算出其对应的自变量x的梯度，x.grad将其收到的多个梯度值累加。
+# （注意，1，2，3步骤的求梯度顺序和对多个梯度值的累加规则恰好是求导链式法则的程序表述）
+# 正因为求导链式法则衍生的梯度累加规则，张量的grad梯度不会自动清零，在需要的时候需要手动置零。
+
+# 四、叶子节点和非叶子节点
+# 执行下面代码，我们会发现loss.grad并不是我们期望的1，而是None。
+# 类似地y1.grad以及y2.grad也是None。
+# 这是为什么呢？这是由于它们不是叶子节点张量。
+# 在反向传播过程中，只有is_leaf=True的叶子节点，需要求导的张量的导数结果才会被最后保留下来。
+# 那么什么是叶子节点张量呢？叶子节点张量需要满足两个条件。
+# 1、叶子节点张量是由用户直接创建的张量，而非由某个Function通过计算得到的张量。
+# 2、叶子节点张量的requires_grad属性必须为True.
+# Pytorch设计这样的规则主要是为了节约内存或者显存空间，因为几乎所有的时候，用户指挥关心他自己直接创建的张量的梯度。
+# 所有依赖于叶子节点张量的张量，其requires_grad属性必定是True的，但其梯度值只在计算过程中被用到，不会最终存储到grad属性中。
+# 如果需要保留中间计算结果的梯度到grad属性中，可以使用retain_grad方法。如果仅仅是为了调试代码查看梯度值，可以利用
+# register_hook打印日志。
+
+x = torch.tensor(3.0, requires_grad=True)
+y1 = x + 1
+y2 = 2 * x
+loss = (y1-y2)**2
+
+loss.backward()
+print("loss.grad:", loss.grad)
+print("y1.grad:", y1.grad)
+print("y2.grad:", y2.grad)
+print(x.grad)
+
+print(x.is_leaf)
+print(y1.is_leaf)
+print(y2.is_leaf)
+print(loss.is_leaf)
+
+# 利用retain_grad可以保留非叶子节点的梯度值，利用register_hook可以查看非叶子节点的梯度值。
+
+# 正向传播
+x = torch.tensor(3.0, requires_grad=True)
+y1 = x + 1
+y2 = 2 * x
+loss = (y1-y2)**2
+
+# 非叶子节点梯度显示控制
+y1.register_hook(lambda grad: print('y1 grad: ', grad))
+y2.register_hook(lambda grad: print('y2 grad: ', grad))
+loss.retain_grad()
+
+# 反向传播
+loss.backward()
+print("loss.grad: ", loss.grad)
+print("x.grad: ", x.grad)
 
 # 五、计算图在TensorBoard中的可视化
 # 可以利用torch.utils.tensorboard将计算图导出到TensorBoard进行可视化。
+from torch import nn
+class Net(nn.Module):
+    def __init__(self):
+        super(Net, self).__init__()
+        self.w = nn.Parameter(torch.randn(2,1))
+        self.b = nn.Parameter(torch.zeros(1,1))
+
+    def forward(self, x):
+        y = x @ self.w + self.b
+        return y
+
+net = Net()
+
+from torch.utils.tensorboard import SummaryWriter
+writer = SummaryWriter("./data/tensorboard")
+writer.add_graph(net, input_to_model=torch.rand(10,2))
+writer.close()
+
+from tensorboard import notebook
+notebook.list()
+
+# 在tensorboard中查看模型
+notebook.start("--logdir ./data/tensorboard")
