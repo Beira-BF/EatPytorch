@@ -132,3 +132,93 @@ torch.index_fill(scores, dim=1, index=torch.tensor([0,5,9]), value=100)
 b = torch.masked_fill(scores, scores<60,60)
 # 等价于b=scores.masked_fill(scores<60,60)
 print(b)
+
+# 三、维度变换
+# 维度变换相关函数主要有torch.reshape（或者调用张量的view方法），torch.squeeze, torch.unsqueezem torch.transpose
+# torch.reshape可以改变张量的形状。
+# torch.squeeze可以减少维度。
+# torch.unsqueeze可以增加维度。
+# torch.transpose可以交换维度。
+
+# 张量的view方法有时候会调用失败，可以使用reshape方法。
+torch.manual_seed(0)
+minval, maxval = 0, 255
+a = (minval + (maxval - minval) * torch.rand([1,3,3,2])).int()
+print(a.shape)
+print(a)
+
+# 改成（3，6）形状的张量
+b = a.view([3,6]) # torch.reshape(a, [3,6])
+print(b.shape)
+print(b)
+
+# 改回成[1,3,3,2]形状的张量
+c = torch.reshape(b, [1,3,3,2]) # b.view([1,3,3,2]
+print(c)
+
+# 如果张量在某个维度上只有一个元素，利用torch.squeeze可以消除这个维度。
+# torch.unsqueeze 的作用和torch.squeeze的作用相反。
+a = torch.tensor([[1.0,2.0]])
+s = torch.squeeze(a)
+print(a)
+print(s)
+print(a.shape)
+print(s.shape)
+
+# 在第0维插入长度为1的一个维度
+d = torch.unsqueeze(s, axis=0)
+print(s)
+print(d)
+
+print(s.shape)
+print(d.shape)
+
+# torch.transpose可以交换张量的维度，torch.transpose常用于图片存储格式的变换上。
+# 如果是二维的矩阵，通常会调用矩阵的转置方法matrix.t(),等价于torch.transpose(matrix, 0, 1)
+minval = 0
+maxval = 255
+# Batch, Height, Width, Channel
+data = torch.floor(minval + (maxval-minval)*torch.rand([100,256, 256, 4])).int()
+print(data.shape)
+
+# 转换成Pytorch默认的图片格式Batch，Channel, Height, Width
+# 需要交换两次
+data_t = torch.transpose(torch.transpose(data, 1, 2), 1, 3)
+print(data_t.shape)
+
+matrix = torch.tensor([[1,2,3],[4,5,6]])
+print(matrix)
+print(matrix.t()) # 等价于torch.transpose(matrix, 0, 1)
+
+# 四、合并分割
+# 可以用torch.cat方法和torch.stack方法将多个张量合并，可以用torch.split方法把一个张量分割成多个张量。
+# torch.cat和torch.stack有略微的区别，torch.cat是连接，不会增加维度，而torch.stack是堆叠，会增加维度。
+a = torch.tensor([[1.0,2.0],[3.0,4.0]])
+b = torch.tensor([[5.0,6.0],[7.0,8.0]])
+c = torch.tensor([[9.0,10.0],[11.0,12.0]])
+
+abc_cat = torch.cat([a,b,c], dim=0)
+print(abc_cat.shape)
+print(abc_cat)
+
+abc_stack = torch.stack([a,b,c], axis=0) # torch中dim和axis参数名可以混用
+print(abc_stack.shape)
+print(abc_stack)
+
+torch.cat([a,b,c], axis=1)
+
+torch.stack([a,b,c], axis=1)
+
+# torch.split是torch.cat的逆运算，可以指定分割数份平均分割，也可以通过指定每份的记录数量进行分割。
+print(abc_cat)
+a,b,c = torch.split(abc_cat, split_size_or_sections=2, dim=0) # 每份2个进行分割
+print(a)
+print(b)
+print(c)
+
+print(abc_cat)
+p,q,r = torch.split(abc_cat, split_size_or_sections=[4,1,1],dim=0) # 每份分别为[4，1，1]
+print(p)
+print(q)
+print(r)
+
