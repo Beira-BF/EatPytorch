@@ -99,8 +99,10 @@ Conclusion
 
 class EncoderDecoder(nn.Module):
     """
-    A standard Encoder-Decoder architecture. Base for this and many other models.
+    A standard Encoder-Decoder architecture. Base for this and many
+    other models.
     """
+
     def __init__(self, encoder, decoder, src_embed, tgt_embed, generator):
         super(EncoderDecoder, self).__init__()
         self.encoder = encoder
@@ -111,7 +113,8 @@ class EncoderDecoder(nn.Module):
 
     def forward(self, src, tgt, src_mask, tgt_mask):
         "Take in and process masked src and target sequences."
-        return self.decode(self.encode(src, src_mask), src_mask, tgt, tgt_mask)
+        return self.decode(self.encode(src, src_mask), src_mask,
+                           tgt, tgt_mask)
 
     def encode(self, src, src_mask):
         return self.encoder(self.src_embed(src), src_mask)
@@ -139,12 +142,14 @@ def clones(module, N):
     "Produce N identical layers."
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
+
 class Encoder(nn.Module):
     "Core encoder is a stack of N layers"
+
     def __init__(self, layer, N):
         super(Encoder, self).__init__()
         self.layers = clones(layer, N)
-        self.norm = torch.nn.LayerNorm(layer.size)
+        self.norm = LayerNorm(layer.size)
 
     def forward(self, x, mask):
         "Pass the input (and mask) through each layer in turn."
@@ -176,7 +181,7 @@ class LayerNorm(nn.Module):
 
 class SublayerConnection(nn.Module):
     """
-    A residule connection followed by a layer norm.
+    A residual connection followed by a layer norm.
     Note for code simplicity the norm is first as opposed to last.
     """
     def __init__(self, size, dropout):
@@ -494,16 +499,19 @@ def run_epoch(data_iter, model, loss_compute):
     total_loss = 0
     tokens = 0
     for i, batch in enumerate(data_iter):
-        out = model.forward(batch.src, batch.trg, batch.src_mask, batch.trg_mask)
+        out = model.forward(batch.src, batch.trg,
+                            batch.src_mask, batch.trg_mask)
         loss = loss_compute(out, batch.trg_y, batch.ntokens)
         total_loss += loss
         total_tokens += batch.ntokens
-        if i%50 == 1:
+        tokens += batch.ntokens
+        if i % 50 == 1:
             elapsed = time.time() - start
-            print("Epoch Step: %d Loss: %f Tokens per Sec: %f" %(i, loss/batch.ntokens, tokens/elapsed))
+            print("Epoch Step: %d Loss: %f Tokens per Sec: %f" %
+                    (i, loss / batch.ntokens, tokens / elapsed))
             start = time.time()
             tokens = 0
-        return total_loss / total_tokens
+    return total_loss / total_tokens
 
 # Training Data and Batching
 # We trained on the standard WMT 2014 English-German dataset consisting of about 4.5 million sentence pairs. Sentences
@@ -538,13 +546,14 @@ def batch_size_fn(new, count, sofar):
 # (3.5 days).
 
 # Optimizer
-# We used the Adam optimizer with beta1 = 0.9, beta2 = 0.98, epsilon=10-9. We varied the larning rate over the course of
+# We used the Adam optimizer with beta1 = 0.9, beta2 = 0.98, epsilon=10-9. We varied the learning rate over the course of
 # training, according to the formula: lrate = dmodel-0.5*min(step_num-0.5, step_num*warmup_steps-1.5) This
 # corresponds to increasing the learning rate linearly for the first warmupsteps training steps, and decreasing it thereafter
-# rpoportionally to the inverse square root of the step number. We used warmupsteps = 4000.
+# proportionally to the inverse square root of the step number. We used warmupsteps = 4000.
 # Note: This part is very important. Need to train with this setup of the model.
 class NoamOpt:
-    "Optim warpper that implements rate."
+    "Optim wrapper that implements rate."
+
     def __init__(self, model_size, factor, warmup, optimizer):
         self.optimizer = optimizer
         self._step = 0
@@ -564,9 +573,12 @@ class NoamOpt:
 
     def rate(self, step=None):
         "Implement `lrate` above"
-        if step in None:
+        if step is None:
             step = self._step
-        return self.factor * (self.model_size ** (-0.5) * min(step ** (-0.5), step * self.warmup ** (-1.5)))
+        return self.factor * \
+               (self.model_size ** (-0.5) *
+                min(step ** (-0.5), step * self.warmup ** (-1.5)))
+
 
 def get_std_opt(model):
     return NoamOpt(model.src_embed[0].d_model, 2, 4000,
@@ -579,15 +591,15 @@ opts = [NoamOpt(512, 1, 4000, None),
         NoamOpt(512, 1, 8000, None),
         NoamOpt(256, 1, 4000, None)]
 plt.plot(np.arange(1, 20000), [[opt.rate(i) for opt in opts] for i in range(1, 20000)])
-plt.legend("512:4000", "512:8000", "256:4000")
-plt.show()
+plt.legend(["512:4000", "512:8000", "256:4000"])
 
 # Regularization
 # Label Smoothing
 # During training, we employed label smoothing of value els=0.1. This hurts perplexity, as the model learns to be more
 # unsure, but improves accuracy and BLUE score.
+
 # We implement label smoothing using the KL div loss. Instead of using a one-hot target distribution, we create
-# a distribution that has confidence of the corect word and rest of the smoothing mass distributed
+# a distribution that has confidence of the correct word and rest of the smoothing mass distributed
 # throughout the vocabulary.
 
 class LabelSmoothing(nn.Module):
@@ -596,7 +608,7 @@ class LabelSmoothing(nn.Module):
         super(LabelSmoothing, self).__init__()
         self.criterion = nn.KLDivLoss(size_average=False)
         self.padding_idx = padding_idx
-        self.confidence = 1.0 -smoothing
+        self.confidence = 1.0 - smoothing
         self.smoothing = smoothing
         self.size = size
         self.true_dist = None
@@ -613,4 +625,398 @@ class LabelSmoothing(nn.Module):
         self.true_dist = true_dist
         return self.criterion(x, Variable(true_dist, requires_grad=False))
 
-    
+# Here we can see an example of how the mass is distributed to the words based on confidence.
+
+# Example of label smoothing.
+crit = LabelSmoothing(5, 0, 0.4)
+predict = torch.FloatTensor([[0, 0.2, 0.7, 0.1, 0],
+                             [0, 0.2, 0.7, 0.1, 0],
+                             [0, 0.2, 0.7, 0.1, 0]])
+v = crit(Variable(predict.log()),
+         Variable(torch.LongTensor([2,1,0])))
+
+# Show the target distributions expected by the system.
+plt.imshow(crit.true_dist)
+
+
+# Label smoothing actually starts to penalize the model if it gets very confident about a given choice.
+crit = LabelSmoothing(5, 0, 0.1)
+def loss(x):
+    d = x + 3 * 1
+    predict = torch.FloatTensor([[0, x / d, 1 / d, 1 / d, 1 / d],
+                                 ])
+    #print(predict)
+    return crit(Variable(predict.log()),
+                 Variable(torch.LongTensor([1]))).data[0]
+# plt.plot(np.arange(1, 100), [loss(x) for x in range(1, 100)])
+# 上一行有bug
+
+# A First Example
+# We can begin by trying out a simple copy-task. Given a random set of input symbols from a small
+# vocabulary, the goal is to generate back those same symbols.
+
+# Synthetic Data
+def data_gen(V, batch, nbatches):
+    "Generate random data for a src-tgt copy task."
+    for i in range(nbatches):
+        data = torch.from_numpy(np.random.randint(1, V, size=(batch, 10)))
+        data[:, 0] = 1
+        src = Variable(data, requires_grad=False)
+        tgt = Variable(data, requires_grad=False)
+        yield Batch(src, tgt, 0)
+
+# Loss Computation
+class SimpleLossCompute:
+    "A simple loss compute and train function."
+    def __init__(self, generator, criterion, opt=None):
+        self.generator = generator
+        self.criterion = criterion
+        self.opt = opt
+
+    def __call__(self, x, y, norm):
+        x = self.generator(x)
+        loss = self.criterion(x.contiguous().view(-1, x.size(-1)),
+                              y.contiguous().view(-1)) / norm
+        loss.backward()
+        if self.opt is not None:
+            self.opt.step()
+            self.opt.optimizer.zero_grad()
+        return loss.data[0] * norm
+
+# Greedy Decoding
+# Train the simple copy task.
+V = 11
+criterion = LabelSmoothing(size=V, padding_idx=0, smoothing=0.0)
+model = make_model(V, V, N=2)
+model_opt = NoamOpt(model.src_embed[0].d_model, 1, 400,
+        torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
+
+# for epoch in range(10):
+#     model.train()
+#     run_epoch(data_gen(V, 30, 20), model,
+#               SimpleLossCompute(model.generator, criterion, model_opt))
+#     model.eval()
+#     print(run_epoch(data_gen(V, 30, 5), model,
+#                     SimpleLossCompute(model.generator, criterion, None)))
+
+# This code predicts a translation using greedy decoding for simplicity.
+def greedy_decode(model, src, src_mask, max_len, start_symbol):
+    memory = model.encode(src, src_mask)
+    ys = torch.ones(1,1).fill_(start_symbol).type_as(src.data)
+    for i in range(max_len-1):
+        out = model.decode(memory, src_mask,
+                           Variable(ys),
+                           Variable(subsequent_mask(ys.size(1)).type_as(src.data)))
+        prob = model.generator(out[:, -1])
+        _, next_word = torch.max(prob, dim=1)
+        next_word = next_word.data[0]
+        ys = torch.cat([ys,
+                        torch.ones(1,1).type_as(src.data).fill_(next_word)], dim=1)
+    return ys
+
+model.eval()
+src = Variable(torch.LongTensor([[1,2,3,4,5,6,7,8,9,10]]))
+src_mask = Variable(torch.ones(1,1,10))
+# print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=1))
+
+# A Real World Example
+# Now we consider a real-world example using the IWSLT German-English Translation task. This task is much smaller
+# than the WMT task considered in the paper, but it illustrates the whole system. We also show how to
+# use multi-gpu processing to make it really fast.
+
+# ! pip install torchtext spacy
+# ! python -m spacy download en
+# ! python -m spacy download de
+
+# Data Loading
+# We will load the dataset using torchtext and spacy for tokenization.
+
+# For data loading.
+from torchtext import data, datasets
+
+if True:
+    import spacy
+    spacy_de = spacy.load('de')
+    spacy_en = spacy.load('en')
+
+    def tokenize_de(text):
+        return [tok.text for tok in spacy_de.tokenizer(text)]
+
+    def tokenize_en(text):
+        return [tok.text for tok in spacy_en.tokenizer(text)]
+
+    BOS_WORD = '<s>'
+    EOS_WORD = '</s>'
+    BLANK_WORD = "<blank>"
+    SRC = data.Field(tokenize=tokenize_de, pad_token=BLANK_WORD)
+    TGT = data.Field(tokenize=tokenize_en, init_token=BOS_WORD,
+                     eos_token=EOS_WORD, pad_token=BLANK_WORD)
+
+    MAX_LEN = 100
+    train, val, test = datasets.IWSLT.splits(
+        exts=('.de', '.en'), fields=(SRC, TGT),
+        filter_pred=lambda x:len(vars(x)['src']) <= MAX_LEN and
+        len(vars(x)['trg']) <= MAX_LEN)
+    MIN_FREQ = 2
+    SRC.build_vocab(train.src, min_freq=MIN_FREQ)
+    TGT.build_vocab(train.trg, min_freq=MIN_FREQ)
+
+# Batching matters a ton fro speed. We want to have very evenly divided batches, with absolutely minimal
+# padding. To do this we have to hack a bit around the default torchtext batching. This code patches their
+# default batching to make sure we search over enough sentences to find tight batches.
+
+# Iterators
+class MyIterator(data.Iterator):
+    def create_batches(self):
+        if self.train:
+            def pool(d, random_shuffler):
+                for p in data.batch(d, self.batch_size * 100):
+                    p_batch = data.batch(
+                        sorted(p, key=self.sort_key),
+                        self.batch_size, self.batch_size_fn)
+                    for b in random_shuffler(list(p_batch)):
+                        yield b
+            self.batches = pool(self.data(), self.random_shuffler)
+
+        else:
+            self.batches = []
+            for b in data.batch(self.data(), self.batch_size, self.batch_size_fn):
+                self.batches.append(sorted(b, key=self.sort_key))
+
+def rebatch(pad_idx, batch):
+    "Fix order in torchtext to match ours"
+    src, trg = batch.src.transpose(0, 1), batch.trg.transpose(0, 1)
+    return Batch(src, trg, pad_idx)
+
+
+# Multi-GPU Training
+# Finally to really target fast training, we will use multi-gpu. This code implements multi-gpu word generation. It
+# is not specific to transformer so I won't go into too much detail. The idea is to split up word generation at
+# training time into chunks to be processed in parallel across many different gpus. We do this using pytorch
+# parallel primitives:
+# replicate - split modules onto different gpus.
+# scatter - split batches onto different gpus.
+# parallel_apply - apply module to batches on different gpus.
+# gather - pull scattered data back onto one gpu.
+# nn.DataParallel - a special module warapper that calls these all before evaluating.
+
+# Skip if not interested in multigpu.
+class MultiGPULossCompute:
+    "A multi-gpu loss compute and train function."
+    def __init__(self, generator, criterion, devices, opt=None, chunk_size=5):
+        # Send out to different gpus.
+        self.generator = generator
+        self.criterion = nn.parallel.replicate(criterion, devices=devices)
+        self.opt = opt
+        self.devices = devices
+        self.chunk_size = chunk_size
+
+    def __call__(self, out, targets, normalize):
+        total = 0.0
+        generator = nn.parallel.replicate(self.generator, devices=self.devices)
+        out_scatter = nn.parallel.scatter(out, target_gpus=self.devices)
+        out_grad = [[] for _ in out_scatter]
+        targets = nn.parallel.scatter(targets, target_gpus=self.devices)
+        # Divide generating into chunks.
+        chunk_size = self.chunk_size
+        for i in range(0, out_scatter[0].size(1), chunk_size):
+
+            out_column = [[Variable(o[:, i:i+chunk_size].data,
+                                    requires_grad=self.opt is not None)]
+                          for o in out_scatter]
+            gen = nn.parallel.parallel_apply(generator, out_column)
+
+            # Compute loss.
+            y = [(g.contiguous().view(-1, g.size(-1)),
+                  t[:, i:i+chunk_size].contiguous().view(-1))
+                 for g, t in zip(gen, targets)]
+            loss = nn.parallel.parallel_apply(self.criterion, y)
+
+            # Sum and normalize loss
+            l = nn.parallel.gather(loss, target_device=self.devices[0])
+            l = l.sum()[0] / normalize
+            total += l.data[0]
+
+            # Backprop loss to output of transformer
+            if self.opt is not None:
+                l.backward()
+                for j, l in enumerate(loss):
+                    out_grad[j].append(out_column[j][0].grad.data.clone())
+
+
+        if self.opt is not None:
+            out_grad = [Variable(torch.cat(og, dim=1)) for og in out_grad]
+            o1 = out
+            o2 = nn.parallel.gather(out_grad, target_device=self.devices[0])
+            o1.backward(gradient=o2)
+            self.opt.step()
+            self.opt.optimizer.zero_grad()
+        return total * normalize
+
+# Now we create our model, criterion, optimizer, data iterators, and paralelization
+
+# GPUs to use
+devices = [0,1,2,3]
+if True:
+    pad_idx = TGT.vocab.stoi["<blank>"]
+    model = make_model(len(SRC.vocab), len(TGT.vocab), N=6)
+    model.cuda()
+    criterion = LabelSmoothing(size=len(TGT.vocab), padding_idx=pad_idx, smoothing=0.1)
+    criterion.cuda()
+    BATCH_SIZE = 12000
+    train_iter = MyIterator(train, batch_size=BATCH_SIZE, device=0,
+                            repeat=False, sort_key=lambda x:(len(x.src),len(x.trg)),
+                            batch_size_fn=batch_size_fn, train=False)
+    model_par = nn.DataParallel(model, device_ids=devices)
+
+# Now we train the model. I will play with the warmup steps a bit, but everything else used the default
+# parameters. On an AWS p3.8xlarge with 4Tesla V100s, this runs at ~27000 tokens per second with a batch
+# size of 12000
+
+# Training the System
+#! wget https://s3.amazonaws.com.opennmt-models/iwslt.pt
+if False:
+    model_opt = NoamOpt(model.src_embed[0].d_model, 1, 2000,
+            torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
+    for epoch in range(10):
+        model_par.train()
+        run_epoch((rebatch(pad_idx, b) for b in train_iter),
+                  model_par,
+                  MultiGPULossCompute(model.generator, criterion,
+                                      devices=devices, opt=model_opt))
+        model_par.eval()
+        loss = run_epoch((rebatch(pad_idx, b) for b in valid_iter),
+                          model_par,
+                          MultiGPULossCompute(model.generator, criterion,
+                          devices=devices, opt=None))
+        print(loss)
+else:
+    model = torch.load("iwslt.pt")
+
+# Once trained we can decode the model to produce a set of translations. Here we simply translate the first
+# sentence in the validation set. This dataset if pretty small so the translations with greedy search are
+# reasonably accurate.
+
+for i, batch in enumerate(valid_iter):
+    src = batch.src.transpose(0,1)[:1]
+    src_mask = (src != SRC.vocab.stoi["<blank"]).unsqueeze(-2)
+    out = greedy_decode(model, src, src_mask,
+                        max_len=60, start_symbol=TGT.vocab.stoi["<s>"])
+    print("Translation:", end="\t")
+    for i in range(1, out.size(1)):
+        sym = TGT.vocab.itos[out[0, i]]
+        if sym == "</s>":break
+        print(sym, end=" ")
+    print()
+    break
+
+# Additional Components: BPE, Search, Averaging
+# So this mostly covers the transformer model itself. There are four aspects that we didn't cover explicitly. We
+# also have all these additional features implemented in OpenNMT-py.
+
+# 1)BPG/Word-piece: We can use a library to first preprocess the data into subword units. See Rico
+# Sennrich's subword-nmt implementation. These models will transform the training data to look like this:
+# _Die_Protokoll date-_kann_heimlich_per_E - Mail_oder_FTP_an_einen_bestimmte n_Empfanger
+# _gesendet_werdem .
+
+# 2) Shared Embeddings: When using BPE with shared vocabulary we can share the same weight vectors
+# between the source /target/ generator. See the (cite) for details. To add this to the model simply do this:
+
+if False:
+    model.src_embed[0].lut.weight = model.tgt_embeddings[0].lut.weight
+    model.generator.lut.weight = model.tgt_embed[0].lut.weight
+
+# 3)Beam Search: This is a bit too complicated to cover here. See the OpenNMT-py for a pytorch implementation.
+
+# 4) Model Averaging: The paper averages the last k checkpoints to create an ensembling effect. We can do
+# this after the fact if we have a bunch of models:
+
+def average(model, models):
+    # Average models into model"
+    for ps in zip(*[m.params() for m in [model] + models]):
+        p[0].copy_(torch.sum(*ps[1:])/len(ps[1:]))
+
+# Results
+# On the WMT 2014 English-to-German translation task, the big transformer model(Transformer(big) in Table 2) outperforms
+# the best previously reported models(including ensembles) by more than 2.0 BLEU, establishing a new state-of-the-art BLEU
+# score of 28.4. The configuration of this model is listed in the bottom line of Table 3. Training took 3.5 days on 8
+# P100 GPUs. Even our base model surpasses all previously published models and ensembles, at a fraction of the training
+# cost of any of the competitive models.
+
+# On the WMT 2014 English-to-French translation task, our big model achieves a BLEU score of 41.0, outperforming all of
+# the previously published single model, at less than 1/4 the training cost of the previous state-of-the-art model. The
+# Transformer(big)model trained for English-to-French used dropout rate Pdrop=0.1, instead of 0.3.
+
+# The code we have written here is a version of the base model. There are fully trained version of this system
+# avaliable here(Example Models).
+# With the additional extensions in the last section, the OpenNMT-py replication gets to 26.9 on EN-DE WMT.
+# Here I have loaded in those parameters to our reimplemenation.
+
+# !wget https://s3.amazonaws.com/opennmt-models/en-de-model.pt
+model, SRC, TGT = torch.load("en-de-model.pt")
+
+model.eval()
+sent = "▁The ▁log ▁file ▁can ▁be ▁sent ▁secret ly ▁with ▁email ▁or ▁FTP ▁to ▁a ▁specified ▁receiver".split()
+src = torch.LongTensor([[SRC.stoi[w] for w in sent]])
+src = Variable(src)
+src_mask = (src != SRC.stoi["<blank>"]).unsqueeze(-2)
+out = greedy_decode(model, src, src_mask,
+                    max_len=60, start_symbol=TGT.stoi["<s>"])
+print("Translation:", end="\t")
+trans = "<s> "
+for i in range(1, out.size(1)):
+    sym = TGT.itos[out[0, i]]
+    if sym == "</s>":break
+    trans += sym + " "
+print(trans)
+
+# Attention Visualization
+# Even with a greedy decoder the translation looks pretty good. We can further visualize it to see what is
+# happening at each layer of the attention.
+tgt_sent = trans.split()
+def draw(data, x, y, ax):
+    seaborn.heatmap(data,
+                    sticklabels=x, square=True, yticklabels=y, vmin=0.0, vmax=1.0,
+                    cbar=False, ax=ax)
+
+for layer in range(1, 6, 2):
+    fig, axs = plt.subplots(1,4, figsize=(20,10))
+    print("Encoder Layer", layer+1)
+    for h in range(4):
+        draw(model.encoder.layers[layer].self_attn.attn[0,h].data,
+             sent, sent if h==0 else [], ax=axs[h])
+    plt.show()
+
+for lay in range(1,6,2):
+    fig,axs = plt.subplots(1,4,figsize=(20,10))
+    print("Decoder Self Layer", layer+1)
+    for h in range(4):
+        draw(model.decoder.layers[layer].self_attn.attn[0, h].data[:len(tgt_sent), :len(tgt_sent)],
+             tgt_sent, tgt_sent if h==0 else [], ax=axs[h])
+    plt.show()
+    print("Decoder Src Layer", layer+1)
+    fig, axs = plt.subplots(1,4, figsize=(20,10))
+    for h in range(4):
+        draw(model.decoder.layers[layer].self_attn.attn[0,h].data[:len(tgt_sent), :len(sent)],
+             sent, tgt_sent if h == 0 else [], ax=axs[h])
+    plt.show()
+
+# Conclusion
+# Hopefully this code is useful for future research. Please reach out if you habe any issues. If you find this code
+# helpful, also check out our other OpenNMT tools.
+"""
+@inproceedings{opennmt,
+  author    = {Guillaume Klein and
+               Yoon Kim and
+               Yuntian Deng and
+               Jean Senellart and
+               Alexander M. Rush},
+  title     = {OpenNMT: Open-Source Toolkit for Neural Machine Translation},
+  booktitle = {Proc. ACL},
+  year      = {2017},
+  url       = {https://doi.org/10.18653/v1/P17-4012},
+  doi       = {10.18653/v1/P17-4012}
+}
+"""
+
+# Cheers, srush
