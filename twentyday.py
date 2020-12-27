@@ -22,3 +22,15 @@ labels = labels.to(device)  # 或者   labels= labels.cuda() if torch.cuda.is_av
 
 # 如果要使用多个GPU训练模型，也非常简单。只需要在将模型设置为数据并行风格模型。则模型移动到GPU上之后，会在每一个GPU上拷贝
 # 一个副本，并把数据平分到各个GPU上进行训练。核心代码如下。
+
+# 定义模型
+...
+if torch.cuda.device_count() > 1:
+    model = nn.DataParallel(model)   # 包装为并行风格模型
+
+# 训练模型
+...
+features = features.to(device)   # 移动数据到cuda
+labels = labels.to(device)  # 或者 labels = labels.cuda() if torch.cuda.is_availabel() else labels
+...
+
