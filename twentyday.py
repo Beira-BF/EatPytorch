@@ -221,7 +221,7 @@ def train(epoches):
 train(500)
 
 
-# 三、torchkeras使用单GPu范例
+# 三、torchkeras使用单GPU范例
 # 下面演示使用torchkeras来应用GPU训练模型的方法。
 # 其对应的CPU训练模型代码参见《6-2，训练模型的3种方法》
 # 本例仅需要在它的基础上增加一行代码，在model.compile时指定device即可。
@@ -333,5 +333,109 @@ model_clone = torchkeras.Model(CnnModel())
 model_clone.compile(loss_func=nn.CrossEntropyLoss(),
                     optimizer=torch.optim.Adam(model.parameters(), lr=0.02),
                     metrics_dict={"accuracy":accuracy}, device=device)  # 注意此处compile时指定来device
+model_clone.evaluate(dl_valid)
+
+# 四、torchkeras使用多GPU范例
+# 注：以下范例需要在有多个GPU的机器上跑。如果在单GPU的机器上跑，也能跑通，但是实际上使用的是单个GPU。
+# 1，准备数据
+import torch
+from torch import nn
+
+import torchvision
+from torchvision import transforms
+
+import torchkeras
+
+transform = transforms.Compose([transforms.ToTensor()])
+
+ds_train = torchvision.datasets.MNIST(root="./data/minist/", train=True, download=True, transform=transform)
+ds_valid = torchvision.datasets.MNIST(root="./data/minist/", train=False, download=True, transform=transform)
+
+dl_train = torch.utils.data.DataLoader(ds_train, batch_size=128, shuffle=True, num_workers=4)
+dl_valid = torch.utils.data.DataLoader(ds_valid, batch_size=128, shuffle=False, num_workers=4)
+
+print(len(ds_train))
+print(len(ds_valid))
+
+
+# 2,定义模型
+class CnnModule(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.layers = nn.ModuleList([
+            nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=5),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.Dropout2d(p=0.1),
+            nn.AdaptiveMaxPool2d((1,1)),
+            nn.Flatten(),
+            nn.Linear(64,32),
+            nn.ReLU(),
+            nn.Linear(32,10)
+        ])
+
+    def forward(self,x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+net = nn.DataParallel(CnnModule())  # Attention this line!!!
+model = torchkeras.Model(net)
+
+model.summary(input_shape=(1,32,32))
+
+
+# 3, 训练模型
+
+from sklearn.metrics import accuracy_score
+
+def accuracy(y_pred, y_true):
+    y_pred_cls = torch.argmax(nn.Softmax(dim=1)(y_pred),dim=1).data
+    return accuracy_score(y_true.cpu().numpy(), y_pred_cls.cpu().numpy())
+    # 注意此处要将数据先移动到cpu上，然后才能转换成numpy数组
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+model.compile(loss_func=nn.CrossEntropyLoss(),
+              optimizer=torch.optim.Adam(model.parameters(), lr=0.02),
+              metrics_dict={"accuracy": accuracy}, device=device)  # 注意此处compile时制定了device
+
+dfhistory = model.fit(3, dl_train=dl_train, dl_val=dl_valid, log_step_freq=100)
+
+# 4,评估模型
+
+import matplotlib.pyplot as plt
+
+def plot_metric(dfhistory, metric):
+    train_metrics = dfhistory[metric]
+    val_metrics = dfhistory['val_'+ metric]
+    epochs = range(1, len(train_metrics) + 1)
+    plt.plot(epochs, train_metrics, 'bo--')
+    plt.plot(epochs, val_metrics, 'ro-')
+    plt.title('Training and validation ' + metric)
+    plt.xlabel('Epochs')
+    plt.ylabel(metric)
+    plt.legend(['train_'+metric, 'val_'+metric])
+    plt.show()
+
+plot_metric(dfhistory, "loss")
+plot_metric(dfhistory, "accuracy")
+
+model.evaluate(dl_valid)
+
+# 5. 使用模型
+model.predict(dl_valid)[0:10]
+
+# 6. 保存模型
+# save the model parameters
+torch.save(model.net.module.state_dic(), "model_parameter.pkl")
+
+net_clone = CnnModel()
+net_clone.load_state_dict(torch.load("model_parameter.pkl"))
+
+model_clone =torchkeras.Model(net_clone)
+model_clone.compile(loss_func=nn.CrossEntropyLoss(),
+                    optimizer=torch.optim.Adam(model.parameters(), lr=0.02),
+                    metrics_dict={"accuracy":accuracy}, device=device)
 model_clone.evaluate(dl_valid)
 
